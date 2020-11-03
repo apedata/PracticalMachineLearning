@@ -1,0 +1,152 @@
+---
+title: "Practical Machine Learning"
+author: "Anne Pedata"
+date: "11/3/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+```{r}
+#library(e1071)
+library(caret)
+library(rpart)
+library(rpart.plot)
+library(RColorBrewer)
+library(rattle)
+library(randomForest)
+library(corrplot)
+library(gbm)
+
+```
+
+## Including Plots
+
+You can also embed plots, for example:
+
+```{r echo = FALSE }
+## GETTING and CLEANING DATA
+setwd("C:/Users/apedata/Downloads")
+train_in <- read.csv('pml-training.csv', header=T)
+valid_in <- read.csv('pml-testing.csv', header=T)
+dim(train_in)
+dim(valid_in)
+
+
+```
+
+```{r echo = FALSE }
+##CLEANING INPUT DATA
+trainData<- train_in[, colSums(is.na(train_in)) == 0]
+validData <- valid_in[, colSums(is.na(valid_in)) == 0]
+dim(trainData)
+##remove 1st 7 varialbes that are not needed 
+
+trainData <- trainData[, -c(1:7)]
+validData <- validData[, -c(1:7)]
+dim(trainData)
+dim(validData)
+
+```
+
+```{r echo = FALSE }
+## creating training and test sets. training is 70% of data.
+set.seed(1234) 
+inTrain <- createDataPartition(trainData$classe, p = 0.7, list = FALSE)
+trainData <- trainData[inTrain, ]
+testData <- trainData[-inTrain, ]
+dim(trainData)
+dim(testData)
+
+```
+
+```{r echo = FALSE }
+##removal of near zero variance variables 
+Z <- nearZeroVar(trainData)
+trainData <- trainData[, -Z]
+testData  <- testData[, -Z]
+dim(trainData)
+dim(trainData)
+dim(testData)
+
+```
+
+```{r echo = FALSE }
+
+## Correlation plot first principal component order and angular order 
+cor_mat <- cor(trainData[, -53])
+corrplot(cor_mat, order = "FPC", method = "color", type = "upper", 
+         tl.cex = 0.8, tl.col = rgb(0, 0, 0))
+
+## names of highly coorelated attributes
+highlyCorrelated = findCorrelation(cor_mat, cutoff=0.75)
+names(trainData)[highlyCorrelated]
+```
+
+```{r echo = FALSE }
+## PREDICTION USING CLASSIFICATION TREES
+set.seed(12345)
+decisionTreeMod1 <- rpart(classe ~ ., data=trainData, method="class")
+fancyRpartPlot(decisionTreeMod1)
+predictTreeMod1 <- predict(decisionTreeMod1, testData, type = "class")
+cmtree <- confusionMatrix(predictTreeMod1, testData$classe)
+cmtree
+# plot matrix results
+plot(cmtree$table, col = cmtree$byClass, 
+     main = paste("Decision Tree - Accuracy =", round(cmtree$overall['Accuracy'], 4)))
+controlRF <- trainControl(method="cv", number=3, verboseIter=FALSE)
+modRF1 <- train(classe ~ ., data=trainData, method="rf", trControl=controlRF)
+modRF1$finalModel
+
+```
+
+```{r echo = FALSE }
+## PREDICTION USING RANDOM FORESTS
+
+predictRF1 <- predict(modRF1, newdata=testData)
+cmrf <- confusionMatrix(predictRF1, testData$classe)
+cmrf
+## ACCURACY IS 1 AND OUT OF SAMPLE ERROR IS ZERO. HIGH ACCURACY
+plot(modRF1)
+##
+plot(cmrf$table, col = cmrf$byClass, main = paste("Random Forest Confusion Matrix: Accuracy =", round(cmrf$overall['Accuracy'], 4)))
+```
+
+```{r echo = FALSE }
+##  PREDICTION USING GENERALIZED BOOSTED REGRESSION MODELS
+
+set.seed(12345)
+controlGBM <- trainControl(method = "repeatedcv", number = 5, repeats = 1)
+modGBM  <- train(classe ~ ., data=trainData, method = "gbm", trControl = controlGBM, verbose = FALSE)
+modGBM$finalModel
+
+print(modGBM)
+```
+
+```{r echo = FALSE }
+## VALIDATE THE GENERALIZED BOOSTED REGRESSION MODEL
+
+predictGBM <- predict(modGBM, newdata=testData)
+cmGBM <- confusionMatrix(predictGBM, testData$classe)
+cmGBM
+## ACCURACE RATE IS 0.9736 AND OUT OF SAMPLE ERROR IS 0.0264
+```
+
+```{r echo = FALSE }
+## COMPARE ALL 3 MODELS
+
+Results <- predict(modRF1, newdata=validData)
+Results
+
+## RESULTS; THE RANDOM FOREST MODEL IS BEST. USE THIS ON VALIDATION DATA
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
